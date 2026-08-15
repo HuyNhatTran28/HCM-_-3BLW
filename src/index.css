@@ -1375,33 +1375,32 @@ body {
 
 /* === INLINE CENTER QR CODE CARD FOR VOTE SCREEN === */
 .qr-inline-card {
-    background: rgba(18, 20, 42, 0.92);
-    border: 1px solid rgba(16, 185, 129, 0.5);
-    border-radius: 20px;
-    padding: 14px 16px;
-    backdrop-filter: blur(16px);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 25px rgba(16, 185, 129, 0.35);
+    background: rgba(18, 20, 42, 0.95);
+    border: 2px solid rgba(16, 185, 129, 0.6);
+    border-radius: 24px;
+    padding: 12px;
+    backdrop-filter: blur(20px);
+    box-shadow: 0 15px 45px rgba(0, 0, 0, 0.9), 0 0 40px rgba(16, 185, 129, 0.45);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
-    cursor: pointer;
     transition: all 0.25s ease;
 }
 
 .qr-inline-card:hover {
-    transform: scale(1.06);
+    transform: scale(1.05);
     border-color: #10b981;
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.9), 0 0 35px rgba(16, 185, 129, 0.6);
+    box-shadow: 0 20px 55px rgba(0, 0, 0, 0.95), 0 0 50px rgba(16, 185, 129, 0.7);
 }
 
 .qr-inline-img-box {
     background: #ffffff;
-    padding: 8px;
-    border-radius: 14px;
+    padding: 12px;
+    border-radius: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow: 0 0 25px rgba(255, 255, 255, 0.25);
 }
 
 .qr-inline-img {

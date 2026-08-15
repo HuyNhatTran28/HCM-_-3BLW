@@ -854,50 +854,6 @@ export default function App() {
         </button>
       ) : null}
 
-      {/* EXPANDED QR CODE GENERATOR MODAL FOR CLASSROOM VOTING */}
-      {isQrModalOpen && (
-        <div className="qr-modal-overlay" onClick={() => setIsQrModalOpen(false)}>
-          <div className="qr-modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="qr-modal-header">
-              <span>📱 MÃ QR BÌNH CHỌN TRỰC TUYẾN DÀNH CHO CẢ LỚP</span>
-              <button className="dropdown-close-btn" onClick={() => setIsQrModalOpen(false)}>✕</button>
-            </div>
-
-            <div className="qr-body-wrapper">
-              <div className="qr-image-box">
-                <QRCodeSVG
-                  value={qrVoterUrlForActiveScenario}
-                  size={260}
-                  bgColor="#ffffff"
-                  fgColor="#000000"
-                  level="L"
-                />
-              </div>
-
-              <div className="qr-info-box">
-                <div className="peer-live-counter">
-                  <span className="live-dot"></span>
-                  <span>Đã kết nối: <strong>{connectedPeersCount}</strong> thiết bị học viên</span>
-                </div>
-
-                <div className="qr-url-display">
-                  <span>Link trực tiếp:</span>
-                  <a href={qrVoterUrlForActiveScenario} target="_blank" rel="noreferrer">{qrVoterUrlForActiveScenario}</a>
-                </div>
-
-                <p className="qr-guide-text">
-                  👉 <strong>Học viên mở camera điện thoại quét mã QR</strong> để truy cập cổng bình chọn trực tuyến Tình huống này. Khi học viên bấm chọn 🔴 hoặc 🔵 trên điện thoại, số phiếu sẽ tự động nhảy lên thời gian thực (Real-time) trên màn hình chiếu!
-                </p>
-
-                <button className="btn btn-glow btn-close-qr" onClick={() => setIsQrModalOpen(false)}>
-                  <span>Đóng cửa sổ QR & Xem màn hình lớp</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* QUICK SCENARIO SELECTOR OVERLAY / DROPDOWN MENU */}
       {isDropdownOpen && (
         <div className="scenario-dropdown-overlay" onClick={() => setIsDropdownOpen(false)}>
@@ -953,9 +909,6 @@ export default function App() {
             <button className="btn btn-glow" onClick={() => setCurrentScreen('scene-1')}>
               <span>Bắt đầu tình huống</span>
               <span className="btn-icon">→</span>
-            </button>
-            <button className="btn btn-qr-trigger" onClick={() => setIsQrModalOpen(true)}>
-              <span>📱 QR Bình chọn Lớp học</span>
             </button>
           </div>
         </div>
@@ -1035,23 +988,15 @@ export default function App() {
         );
       })}
 
-      {/* === SCREEN 6: VOTE SCREEN WITH NATIVE DIRECT SVG QR CODE === */}
+      {/* === SCREEN 6: VOTE SCREEN WITH CLEAN ENLARGED SVG QR CODE === */}
       <div id="screen-vote" className={`screen ${currentScreen === 'vote' ? 'active' : ''}`}>
-        <div style={{ position: 'absolute', top: 18, left: 20, zIndex: 40, display: 'flex', gap: '12px' }}>
-          <button
-            className="btn btn-back btn-back-sm"
-            onClick={() => setCurrentScreen('scene-4')}
-          >
-            <span>← Xem lại tình huống</span>
-          </button>
-          <button
-            className="btn-qr-trigger-sm"
-            onClick={() => setIsQrModalOpen(true)}
-            title="Mở mã QR cho cả lớp quét bình chọn"
-          >
-            <span>📱 Phóng To Mã QR</span>
-          </button>
-        </div>
+        <button
+          className="btn btn-back btn-back-sm"
+          style={{ position: 'absolute', top: 18, left: 20, zIndex: 40 }}
+          onClick={() => setCurrentScreen('scene-4')}
+        >
+          <span>← Xem lại tình huống</span>
+        </button>
 
         <div className="vote-split-container">
           {/* Left Side: Red */}
@@ -1073,24 +1018,20 @@ export default function App() {
             </div>
           </div>
 
-          {/* CENTER PANEL WITH DIRECT SVG QR CODE & VS DIVIDER */}
+          {/* CENTER PANEL WITH DIRECT ENLARGED SVG QR CODE & VS DIVIDER */}
           <div className="vs-center-container">
             <div className="vs-divider">VS</div>
 
-            {/* DIRECT DISPLAY SVG QR CODE CARD */}
-            <div className="qr-inline-card" onClick={() => setIsQrModalOpen(true)} title="Bấm để phóng to mã QR">
+            {/* ENLARGED CLEAN SVG QR CODE CARD (NO EXTRA TEXT) */}
+            <div className="qr-inline-card">
               <div className="qr-inline-img-box">
                 <QRCodeSVG
                   value={qrVoterUrlForActiveScenario}
-                  size={160}
+                  size={230}
                   bgColor="#ffffff"
                   fgColor="#000000"
                   level="L"
                 />
-              </div>
-              <div className="qr-inline-text">
-                <span className="qr-scan-badge">📱 QUÉT MÃ QR BÌNH CHỌN</span>
-                <small className="qr-scan-sub">Tự động nhảy phiếu thời gian thực</small>
               </div>
             </div>
           </div>
@@ -1204,23 +1145,15 @@ export default function App() {
         </div>
       </div>
 
-      {/* === SCREEN 8: FINAL VOTE (CÂU HỎI CUỐI: TÀI HAY ĐỨC?) WITH DIRECT SVG QR === */}
+      {/* === SCREEN 8: FINAL VOTE (CÂU HỎI CUỐI: TÀI HAY ĐỨC?) WITH ENLARGED CLEAN SVG QR === */}
       <div id="screen-final-vote" className={`screen ${currentScreen === 'final-vote' ? 'active' : ''}`}>
-        <div style={{ position: 'absolute', top: 18, left: 20, zIndex: 40, display: 'flex', gap: '12px' }}>
-          <button
-            className="btn btn-back btn-back-sm"
-            onClick={() => setCurrentScreen('results')}
-          >
-            <span>← Quay lại kết quả Tình huống 6</span>
-          </button>
-          <button
-            className="btn-qr-trigger-sm"
-            onClick={() => setIsQrModalOpen(true)}
-            title="Mở mã QR cho cả lớp quét bình chọn"
-          >
-            <span>📱 Phóng To Mã QR</span>
-          </button>
-        </div>
+        <button
+          className="btn btn-back btn-back-sm"
+          style={{ position: 'absolute', top: 18, left: 20, zIndex: 40 }}
+          onClick={() => setCurrentScreen('results')}
+        >
+          <span>← Quay lại kết quả Tình huống 6</span>
+        </button>
 
         <div className="final-vote-header">
           <div className="final-badge">ĐÚC KẾT TOÀN BỘ GAME</div>
@@ -1251,23 +1184,19 @@ export default function App() {
             </div>
           </div>
 
-          {/* CENTER PANEL WITH DIRECT SVG QR CODE FOR FINAL QUESTION */}
+          {/* CENTER PANEL WITH DIRECT ENLARGED SVG QR CODE FOR FINAL QUESTION */}
           <div className="vs-center-container">
             <div className="vs-divider">VS</div>
 
-            <div className="qr-inline-card" onClick={() => setIsQrModalOpen(true)} title="Bấm để phóng to mã QR">
+            <div className="qr-inline-card">
               <div className="qr-inline-img-box">
                 <QRCodeSVG
                   value={qrVoterUrlForFinalScenario}
-                  size={160}
+                  size={230}
                   bgColor="#ffffff"
                   fgColor="#000000"
                   level="L"
                 />
-              </div>
-              <div className="qr-inline-text">
-                <span className="qr-scan-badge">📱 QUÉT QR CÂU HỎI CUỐI</span>
-                <small className="qr-scan-sub">Tự động nhảy phiếu live</small>
               </div>
             </div>
           </div>
