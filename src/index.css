@@ -701,24 +701,37 @@ body {
     color: #fff;
 }
 
-/* Center VS Badge */
-.vs-divider {
+/* Center VS & QR Code Panel */
+.vs-center-container {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    z-index: 20;
-    width: 70px;
-    height: 70px;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    pointer-events: auto;
+}
+
+.vs-divider {
+    position: relative;
+    top: auto;
+    left: auto;
+    transform: none;
+    z-index: 5;
+    width: 64px;
+    height: 64px;
     background: #0d0d1a;
-    border: 3px solid rgba(255, 255, 255, 0.2);
+    border: 3px solid rgba(255, 255, 255, 0.25);
     border-radius: 50%;
     display: flex;
     justify-content: center;
     align-items: center;
     font-family: var(--font-heading);
     font-weight: 900;
-    font-size: 1.3rem;
+    font-size: 1.2rem;
     color: #ffffff;
     box-shadow: 0 0 30px rgba(0, 0, 0, 0.9);
 }
@@ -1361,19 +1374,6 @@ body {
 }
 
 /* === INLINE CENTER QR CODE CARD FOR VOTE SCREEN === */
-.vs-center-container {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 10;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 16px;
-    pointer-events: auto;
-}
-
 .qr-inline-card {
     background: rgba(18, 20, 42, 0.92);
     border: 1px solid rgba(16, 185, 129, 0.5);
