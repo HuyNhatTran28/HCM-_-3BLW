@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Peer from 'peerjs';
 
 // Multi-scenario data structure (6 Scenarios)
 const scenariosData = [
@@ -359,11 +360,17 @@ const scenariosData = [
 ];
 
 export default function App() {
+  // Check if current URL is in Mobile Voter Mode (?voter=true)
+  const isVoterUrl = typeof window !== 'undefined' && window.location.search.includes('voter=true');
+  const [isVoterMode] = useState(isVoterUrl);
+
   const [scenarioIndex, setScenarioIndex] = useState(0); // 0..5
   const [currentScreen, setCurrentScreen] = useState('landing'); // landing, scene-X, vote, results, final-vote, final-insight
   const [typedText, setTypedText] = useState('');
   const [isTypingComplete, setIsTypingComplete] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [connectedPeersCount, setConnectedPeersCount] = useState(0);
   
   // Track votes across all scenarios
   const [allScenarioVotes, setAllScenarioVotes] = useState({
@@ -387,11 +394,21 @@ export default function App() {
   const [finalPopRed, setFinalPopRed] = useState(false);
   const [finalPopBlue, setFinalPopBlue] = useState(false);
 
+  // Mobile Voter state
+  const [selectedVoterScenario, setSelectedVoterScenario] = useState(1); // 1..6 or 7 for final
+  const [voterChoice, setVoterChoice] = useState(null); // 'red' or 'blue'
+  const [voteFeedback, setVoteFeedback] = useState('');
+
   const activeScenario = scenariosData[scenarioIndex];
 
   // Audio ref
   const audioRef = useRef(null);
   const audioStartedRef = useRef(false);
+
+  // Realtime BroadcastChannel & PeerJS setup
+  const broadcastChannelRef = useRef(null);
+  const peerRef = useRef(null);
+  const peerConnRef = useRef(null);
 
   // Play audio on first user click anywhere
   const handleFirstClick = () => {
@@ -407,6 +424,118 @@ export default function App() {
     window.addEventListener('click', handleFirstClick, { once: true });
     return () => window.removeEventListener('click', handleFirstClick);
   }, []);
+
+  // REAL-TIME SYNC SETUP (Presenter & Voter)
+  useEffect(() => {
+    // 1. BroadcastChannel for same-browser / multi-tab real-time sync
+    try {
+      const bc = new BroadcastChannel('hcm_moral_game_sync');
+      broadcastChannelRef.current = bc;
+
+      bc.onmessage = (event) => {
+        const data = event.data;
+        if (!data) return;
+
+        if (data.type === 'VOTE') {
+          handleIncomingRealtimeVote(data.scenarioId, data.choice);
+        } else if (data.type === 'FINAL_VOTE') {
+          handleIncomingFinalVote(data.choice);
+        }
+      };
+    } catch (e) {
+      console.log('BroadcastChannel not supported', e);
+    }
+
+    // 2. PeerJS WebRTC Realtime Sync across different devices
+    if (!isVoterMode) {
+      // PRESENTER HOST PEER
+      try {
+        const peer = new Peer('hcm-bl3w-class-room');
+        peerRef.current = peer;
+
+        peer.on('open', (id) => {
+          console.log('Presenter PeerJS Ready ID:', id);
+        });
+
+        peer.on('connection', (conn) => {
+          setConnectedPeersCount(prev => prev + 1);
+
+          conn.on('data', (data) => {
+            if (!data) return;
+            if (data.type === 'VOTE') {
+              handleIncomingRealtimeVote(data.scenarioId, data.choice);
+            } else if (data.type === 'FINAL_VOTE') {
+              handleIncomingFinalVote(data.choice);
+            }
+          });
+
+          conn.on('close', () => {
+            setConnectedPeersCount(prev => Math.max(0, prev - 1));
+          });
+        });
+
+        return () => {
+          peer.destroy();
+        };
+      } catch (err) {
+        console.log('PeerJS Host Error', err);
+      }
+    } else {
+      // MOBILE VOTER PEER CLIENT
+      try {
+        const peer = new Peer();
+        peerRef.current = peer;
+
+        peer.on('open', () => {
+          const conn = peer.connect('hcm-bl3w-class-room');
+          peerConnRef.current = conn;
+        });
+
+        return () => {
+          peer.destroy();
+        };
+      } catch (err) {
+        console.log('PeerJS Client Error', err);
+      }
+    }
+  }, [isVoterMode]);
+
+  // Handle incoming votes from students' mobile phones
+  const handleIncomingRealtimeVote = (scId, choice) => {
+    setAllScenarioVotes(prevAll => {
+      const currentVal = prevAll[scId] || { red: 0, blue: 0 };
+      const updated = {
+        ...currentVal,
+        [choice]: currentVal[choice] + 1
+      };
+      return { ...prevAll, [scId]: updated };
+    });
+
+    // If current scenario matches active scenario, update active vote state & pop animation
+    if (scId === activeScenario.id) {
+      if (choice === 'red') {
+        setRedVotes(r => r + 1);
+        setPopRed(true);
+        setTimeout(() => setPopRed(false), 200);
+      } else {
+        setBlueVotes(b => b + 1);
+        setPopBlue(true);
+        setTimeout(() => setPopBlue(false), 200);
+      }
+    }
+  };
+
+  const handleIncomingFinalVote = (choice) => {
+    if (choice === 'red') {
+      setFinalRedVotes(prev => prev + 1);
+      setFinalPopRed(true);
+      setTimeout(() => setFinalPopRed(false), 200);
+    } else {
+      setFinalBlueVotes(prev => prev + 1);
+      setFinalPopBlue(true);
+      setTimeout(() => setFinalPopBlue(false), 200);
+    }
+  };
 
   const resetVotes = () => {
     setRedVotes(0);
@@ -458,10 +587,9 @@ export default function App() {
     if (currentScreen.startsWith('scene-')) {
       const sceneNum = parseInt(currentScreen.replace('scene-', ''), 10);
       const sceneObj = activeScenario.scenes[sceneNum - 1];
-      if (sceneObj) {
-        setTypedText(sceneObj.text);
-        setIsTypingComplete(true);
-      }
+      if (!sceneObj) return;
+      setTypedText(sceneObj.text);
+      setIsTypingComplete(true);
     }
   };
 
@@ -504,6 +632,31 @@ export default function App() {
     }
   };
 
+  // Mobile Voter Action (When student taps Red or Blue on phone)
+  const handleMobileVoteSubmit = (scId, choice) => {
+    setVoterChoice(choice);
+    setVoteFeedback(`✅ Đã gửi phiếu ${choice === 'red' ? '🔴 PHE ĐỎ' : '🔵 PHE XANH'} lên màn hình máy chiếu!`);
+    setTimeout(() => setVoteFeedback(''), 4000);
+
+    // 1. Send via BroadcastChannel
+    if (broadcastChannelRef.current) {
+      broadcastChannelRef.current.postMessage({
+        type: scId === 7 ? 'FINAL_VOTE' : 'VOTE',
+        scenarioId: scId,
+        choice: choice
+      });
+    }
+
+    // 2. Send via PeerJS WebRTC
+    if (peerConnRef.current && peerConnRef.current.open) {
+      peerConnRef.current.send({
+        type: scId === 7 ? 'FINAL_VOTE' : 'VOTE',
+        scenarioId: scId,
+        choice: choice
+      });
+    }
+  };
+
   const handleNextScenario = () => {
     if (scenarioIndex < scenariosData.length - 1) {
       setScenarioIndex(prev => prev + 1);
@@ -529,6 +682,10 @@ export default function App() {
     setIsDropdownOpen(false);
   };
 
+  // Base domain for QR code
+  const currentBaseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://hcm-bl3w.vercel.app';
+  const qrVoterUrl = `${currentBaseUrl}/?voter=true`;
+
   // Vote calculations for scenario vote
   const totalVotes = redVotes + blueVotes;
   const redPercent = totalVotes > 0 ? Math.round((redVotes / totalVotes) * 100) : 50;
@@ -539,6 +696,141 @@ export default function App() {
   const finalRedPercent = finalTotalVotes > 0 ? Math.round((finalRedVotes / finalTotalVotes) * 100) : 50;
   const finalBluePercent = finalTotalVotes > 0 ? 100 - finalRedPercent : 50;
 
+  // =========================================================================
+  // IF MOBILE VOTER MODE (?voter=true), RENDER STANDALONE MOBILE VOTING APP
+  // =========================================================================
+  if (isVoterMode) {
+    const activeVoterScenario = selectedVoterScenario <= 6 ? scenariosData[selectedVoterScenario - 1] : null;
+
+    return (
+      <div className="mobile-voter-viewport">
+        <div className="voter-header">
+          <div className="voter-badge">📱 CỔNG BÌNH CHỌN TRỰC TUYẾN</div>
+          <h1 className="voter-title">BÌNH CHỌN ĐẠO ĐỨC (HCM GAME)</h1>
+          <div className="voter-status">
+            <span>🟢 Đã kết nối với máy chiếu lớp học</span>
+          </div>
+        </div>
+
+        {/* Scenario Selector Tabs for Mobile */}
+        <div className="voter-sc-tabs">
+          {scenariosData.map((sc) => (
+            <button
+              key={sc.id}
+              className={`voter-tab-btn ${selectedVoterScenario === sc.id ? 'active' : ''}`}
+              onClick={() => {
+                setSelectedVoterScenario(sc.id);
+                setVoterChoice(null);
+              }}
+            >
+              TH {sc.id}
+            </button>
+          ))}
+          <button
+            className={`voter-tab-btn final-tab ${selectedVoterScenario === 7 ? 'active' : ''}`}
+            onClick={() => {
+              setSelectedVoterScenario(7);
+              setVoterChoice(null);
+            }}
+          >
+            🎓 Cuối
+          </button>
+        </div>
+
+        {/* Voter Feedback Alert */}
+        {voteFeedback && (
+          <div className="voter-feedback-banner">
+            {voteFeedback}
+          </div>
+        )}
+
+        {/* Mobile Voter Content Card */}
+        {selectedVoterScenario <= 6 && activeVoterScenario ? (
+          <div className="voter-card-container">
+            <div className="voter-topic-tag">{activeVoterScenario.topicTitle}</div>
+
+            <div className="voter-options-grid">
+              {/* Red Choice */}
+              <div
+                className={`voter-choice-card red ${voterChoice === 'red' ? 'selected' : ''}`}
+                onClick={() => handleMobileVoteSubmit(selectedVoterScenario, 'red')}
+              >
+                <div className="voter-choice-header">
+                  <span className="choice-dot red"></span>
+                  <h3>🔴 {activeVoterScenario.vote.redLabel}</h3>
+                </div>
+                <p className="voter-choice-desc">{activeVoterScenario.vote.redSubtitle}</p>
+                <button className="btn-voter-submit red">
+                  {voterChoice === 'red' ? '✓ Đã bình chọn (Bấm để chọn lại)' : 'Bấm chọn 🔴 Phe Đỏ'}
+                </button>
+              </div>
+
+              {/* Blue Choice */}
+              <div
+                className={`voter-choice-card blue ${voterChoice === 'blue' ? 'selected' : ''}`}
+                onClick={() => handleMobileVoteSubmit(selectedVoterScenario, 'blue')}
+              >
+                <div className="voter-choice-header">
+                  <span className="choice-dot blue"></span>
+                  <h3>🔵 {activeVoterScenario.vote.blueLabel}</h3>
+                </div>
+                <p className="voter-choice-desc">{activeVoterScenario.vote.blueSubtitle}</p>
+                <button className="btn-voter-submit blue">
+                  {voterChoice === 'blue' ? '✓ Đã bình chọn (Bấm để chọn lại)' : 'Bấm chọn 🔵 Phe Xanh'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Final Question Voter View (Tài vs Đức) */
+          <div className="voter-card-container">
+            <div className="voter-topic-tag">🎓 CÂU HỎI CUỐI: TÀI HAY ĐỨC?</div>
+            <p className="voter-final-desc">
+              Nếu buộc phải lựa chọn giữa một người có <strong>Tài rất cao nhưng thiếu Đức</strong> và một người có <strong>Đức tốt nhưng năng lực còn hạn chế</strong>, bạn sẽ chọn ai?
+            </p>
+
+            <div className="voter-options-grid">
+              <div
+                className={`voter-choice-card red ${voterChoice === 'red' ? 'selected' : ''}`}
+                onClick={() => handleMobileVoteSubmit(7, 'red')}
+              >
+                <div className="voter-choice-header">
+                  <span className="choice-dot red"></span>
+                  <h3>🔴 CHỌN TÀI</h3>
+                </div>
+                <p className="voter-choice-desc">Kết quả và năng lực là yếu tố quyết định để hoàn thành nhiệm vụ.</p>
+                <button className="btn-voter-submit red">
+                  {voterChoice === 'red' ? '✓ Đã bình chọn (Bấm để chọn lại)' : 'Bấm chọn 🔴 Phe Đỏ (TÀI)'}
+                </button>
+              </div>
+
+              <div
+                className={`voter-choice-card blue ${voterChoice === 'blue' ? 'selected' : ''}`}
+                onClick={() => handleMobileVoteSubmit(7, 'blue')}
+              >
+                <div className="voter-choice-header">
+                  <span className="choice-dot blue"></span>
+                  <h3>🔵 CHỌN ĐỨC</h3>
+                </div>
+                <p className="voter-choice-desc">Phẩm chất và trách nhiệm là nền tảng để năng lực được sử dụng đúng.</p>
+                <button className="btn-voter-submit blue">
+                  {voterChoice === 'blue' ? '✓ Đã bình chọn (Bấm để chọn lại)' : 'Bấm chọn 🔵 Phe Xanh (ĐỨC)'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="voter-footer-note">
+          Vui lòng theo dõi kết quả tổng hợp thời gian thực trên màn hình máy chiếu lớp học.
+        </div>
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // MAIN PRESENTER APPLICATION VIEW (CLASS / PROJECTOR DISPLAY)
+  // =========================================================================
   return (
     <div className="app-viewport" id="app">
       {/* Audio Element */}
@@ -556,6 +848,48 @@ export default function App() {
           ✕ Thoát
         </button>
       ) : null}
+
+      {/* QR CODE GENERATOR MODAL FOR CLASSROOM VOTING */}
+      {isQrModalOpen && (
+        <div className="qr-modal-overlay" onClick={() => setIsQrModalOpen(false)}>
+          <div className="qr-modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="qr-modal-header">
+              <span>📱 MÃ QR BÌNH CHỌN TRỰC TUYẾN DÀNH CHO CẢ LỚP</span>
+              <button className="dropdown-close-btn" onClick={() => setIsQrModalOpen(false)}>✕</button>
+            </div>
+
+            <div className="qr-body-wrapper">
+              <div className="qr-image-box">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrVoterUrl)}&color=000000&bgcolor=ffffff`}
+                  alt="Mã QR bình chọn"
+                  className="qr-code-img"
+                />
+              </div>
+
+              <div className="qr-info-box">
+                <div className="peer-live-counter">
+                  <span className="live-dot"></span>
+                  <span>Đã kết nối: <strong>{connectedPeersCount}</strong> thiết bị học viên</span>
+                </div>
+
+                <div className="qr-url-display">
+                  <span>Link trực tiếp:</span>
+                  <a href={qrVoterUrl} target="_blank" rel="noreferrer">{qrVoterUrl}</a>
+                </div>
+
+                <p className="qr-guide-text">
+                  👉 <strong>Học viên mở camera điện thoại quét mã QR</strong> để truy cập cổng bình chọn trực tuyến. Khi học viên bấm chọn 🔴 hoặc 🔵 trên điện thoại, số phiếu sẽ tự động nhảy lên thời gian thực (Real-time) trên màn hình chiếu!
+                </p>
+
+                <button className="btn btn-glow btn-close-qr" onClick={() => setIsQrModalOpen(false)}>
+                  <span>Đóng cửa sổ QR & Xem màn hình lớp</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* QUICK SCENARIO SELECTOR OVERLAY / DROPDOWN MENU */}
       {isDropdownOpen && (
@@ -608,10 +942,15 @@ export default function App() {
           <h1 className="main-title">ĐỨC HAY TÀI?</h1>
           <p className="subtitle">{activeScenario.landingSubtitle}</p>
 
-          <button className="btn btn-glow" onClick={() => setCurrentScreen('scene-1')}>
-            <span>Bắt đầu tình huống</span>
-            <span className="btn-icon">→</span>
-          </button>
+          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <button className="btn btn-glow" onClick={() => setCurrentScreen('scene-1')}>
+              <span>Bắt đầu tình huống</span>
+              <span className="btn-icon">→</span>
+            </button>
+            <button className="btn btn-qr-trigger" onClick={() => setIsQrModalOpen(true)}>
+              <span>📱 QR Bình chọn Lớp học</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -691,13 +1030,21 @@ export default function App() {
 
       {/* === SCREEN 6: VOTE SCREEN === */}
       <div id="screen-vote" className={`screen ${currentScreen === 'vote' ? 'active' : ''}`}>
-        <button
-          className="btn btn-back btn-back-sm"
-          style={{ position: 'absolute', top: 18, left: 20, zIndex: 30 }}
-          onClick={() => setCurrentScreen('scene-4')}
-        >
-          <span>← Xem lại tình huống</span>
-        </button>
+        <div style={{ position: 'absolute', top: 18, left: 20, zIndex: 30, display: 'flex', gap: '12px' }}>
+          <button
+            className="btn btn-back btn-back-sm"
+            onClick={() => setCurrentScreen('scene-4')}
+          >
+            <span>← Xem lại tình huống</span>
+          </button>
+          <button
+            className="btn-qr-trigger-sm"
+            onClick={() => setIsQrModalOpen(true)}
+            title="Mở mã QR cho cả lớp quét bình chọn"
+          >
+            <span>📱 Mở Mã QR Bình Chọn</span>
+          </button>
+        </div>
 
         <div className="vote-split-container">
           {/* Left Side: Red */}
@@ -719,7 +1066,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Center VS Badge */}
+          {/* Center VS Divider */}
           <div className="vs-divider">VS</div>
 
           {/* Right Side: Blue */}
@@ -833,13 +1180,21 @@ export default function App() {
 
       {/* === SCREEN 8: FINAL VOTE (CÂU HỎI CUỐI: TÀI HAY ĐỨC?) === */}
       <div id="screen-final-vote" className={`screen ${currentScreen === 'final-vote' ? 'active' : ''}`}>
-        <button
-          className="btn btn-back btn-back-sm"
-          style={{ position: 'absolute', top: 18, left: 20, zIndex: 30 }}
-          onClick={() => setCurrentScreen('results')}
-        >
-          <span>← Quay lại kết quả Tình huống 6</span>
-        </button>
+        <div style={{ position: 'absolute', top: 18, left: 20, zIndex: 30, display: 'flex', gap: '12px' }}>
+          <button
+            className="btn btn-back btn-back-sm"
+            onClick={() => setCurrentScreen('results')}
+          >
+            <span>← Quay lại kết quả Tình huống 6</span>
+          </button>
+          <button
+            className="btn-qr-trigger-sm"
+            onClick={() => setIsQrModalOpen(true)}
+            title="Mở mã QR cho cả lớp quét bình chọn"
+          >
+            <span>📱 Mở Mã QR Bình Chọn</span>
+          </button>
+        </div>
 
         <div className="final-vote-header">
           <div className="final-badge">ĐÚC KẾT TOÀN BỘ GAME</div>
@@ -870,7 +1225,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Center VS Badge */}
+          {/* Center VS Divider */}
           <div className="vs-divider">VS</div>
 
           {/* Right Side: Blue (ĐỨC) */}
