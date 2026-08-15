@@ -364,6 +364,10 @@ export default function App() {
   const isVoterUrl = typeof window !== 'undefined' && window.location.search.includes('voter=true');
   const [isVoterMode] = useState(isVoterUrl);
 
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  const initialScenarioFromUrl = searchParams && searchParams.get('scenario') ? parseInt(searchParams.get('scenario'), 10) : 1;
+  const [selectedVoterScenario, setSelectedVoterScenario] = useState(initialScenarioFromUrl);
+
   const [scenarioIndex, setScenarioIndex] = useState(0); // 0..5
   const [currentScreen, setCurrentScreen] = useState('landing'); // landing, scene-X, vote, results, final-vote, final-insight
   const [typedText, setTypedText] = useState('');
@@ -395,7 +399,6 @@ export default function App() {
   const [finalPopBlue, setFinalPopBlue] = useState(false);
 
   // Mobile Voter state
-  const [selectedVoterScenario, setSelectedVoterScenario] = useState(1); // 1..6 or 7 for final
   const [voterChoice, setVoterChoice] = useState(null); // 'red' or 'blue'
   const [voteFeedback, setVoteFeedback] = useState('');
 
@@ -684,7 +687,8 @@ export default function App() {
 
   // Base domain for QR code
   const currentBaseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://hcm-bl3w.vercel.app';
-  const qrVoterUrl = `${currentBaseUrl}/?voter=true`;
+  const qrVoterUrlForActiveScenario = `${currentBaseUrl}/?voter=true&scenario=${activeScenario.id}`;
+  const qrVoterUrlForFinalScenario = `${currentBaseUrl}/?voter=true&scenario=7`;
 
   // Vote calculations for scenario vote
   const totalVotes = redVotes + blueVotes;
@@ -849,7 +853,7 @@ export default function App() {
         </button>
       ) : null}
 
-      {/* QR CODE GENERATOR MODAL FOR CLASSROOM VOTING */}
+      {/* EXPANDED QR CODE GENERATOR MODAL FOR CLASSROOM VOTING */}
       {isQrModalOpen && (
         <div className="qr-modal-overlay" onClick={() => setIsQrModalOpen(false)}>
           <div className="qr-modal-content" onClick={(e) => e.stopPropagation()}>
@@ -861,7 +865,7 @@ export default function App() {
             <div className="qr-body-wrapper">
               <div className="qr-image-box">
                 <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrVoterUrl)}&color=000000&bgcolor=ffffff`}
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(qrVoterUrlForActiveScenario)}&color=000000&bgcolor=ffffff`}
                   alt="Mã QR bình chọn"
                   className="qr-code-img"
                 />
@@ -875,11 +879,11 @@ export default function App() {
 
                 <div className="qr-url-display">
                   <span>Link trực tiếp:</span>
-                  <a href={qrVoterUrl} target="_blank" rel="noreferrer">{qrVoterUrl}</a>
+                  <a href={qrVoterUrlForActiveScenario} target="_blank" rel="noreferrer">{qrVoterUrlForActiveScenario}</a>
                 </div>
 
                 <p className="qr-guide-text">
-                  👉 <strong>Học viên mở camera điện thoại quét mã QR</strong> để truy cập cổng bình chọn trực tuyến. Khi học viên bấm chọn 🔴 hoặc 🔵 trên điện thoại, số phiếu sẽ tự động nhảy lên thời gian thực (Real-time) trên màn hình chiếu!
+                  👉 <strong>Học viên mở camera điện thoại quét mã QR</strong> để truy cập cổng bình chọn trực tuyến Tình huống này. Khi học viên bấm chọn 🔴 hoặc 🔵 trên điện thoại, số phiếu sẽ tự động nhảy lên thời gian thực (Real-time) trên màn hình chiếu!
                 </p>
 
                 <button className="btn btn-glow btn-close-qr" onClick={() => setIsQrModalOpen(false)}>
@@ -1028,23 +1032,15 @@ export default function App() {
         );
       })}
 
-      {/* === SCREEN 6: VOTE SCREEN === */}
+      {/* === SCREEN 6: VOTE SCREEN WITH INTEGRATED DIRECT QR CODE === */}
       <div id="screen-vote" className={`screen ${currentScreen === 'vote' ? 'active' : ''}`}>
-        <div style={{ position: 'absolute', top: 18, left: 20, zIndex: 30, display: 'flex', gap: '12px' }}>
-          <button
-            className="btn btn-back btn-back-sm"
-            onClick={() => setCurrentScreen('scene-4')}
-          >
-            <span>← Xem lại tình huống</span>
-          </button>
-          <button
-            className="btn-qr-trigger-sm"
-            onClick={() => setIsQrModalOpen(true)}
-            title="Mở mã QR cho cả lớp quét bình chọn"
-          >
-            <span>📱 Mở Mã QR Bình Chọn</span>
-          </button>
-        </div>
+        <button
+          className="btn btn-back btn-back-sm"
+          style={{ position: 'absolute', top: 18, left: 20, zIndex: 30 }}
+          onClick={() => setCurrentScreen('scene-4')}
+        >
+          <span>← Xem lại tình huống</span>
+        </button>
 
         <div className="vote-split-container">
           {/* Left Side: Red */}
@@ -1066,8 +1062,25 @@ export default function App() {
             </div>
           </div>
 
-          {/* Center VS Divider */}
-          <div className="vs-divider">VS</div>
+          {/* CENTER PANEL WITH DIRECT DYNAMIC QR CODE & VS DIVIDER */}
+          <div className="vs-center-container">
+            <div className="vs-divider">VS</div>
+
+            {/* DIRECT DISPLAY QR CODE CARD */}
+            <div className="qr-inline-card" onClick={() => setIsQrModalOpen(true)} title="Bấm để phóng to mã QR">
+              <div className="qr-inline-img-box">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(qrVoterUrlForActiveScenario)}&color=000000&bgcolor=ffffff`}
+                  alt="QR Code Bình chọn"
+                  className="qr-inline-img"
+                />
+              </div>
+              <div className="qr-inline-text">
+                <span className="qr-scan-badge">📱 QUÉT MÃ QR BÌNH CHỌN</span>
+                <small className="qr-scan-sub">Tự động nhảy phiếu thời gian thực</small>
+              </div>
+            </div>
+          </div>
 
           {/* Right Side: Blue */}
           <div className="vote-side right">
@@ -1178,23 +1191,15 @@ export default function App() {
         </div>
       </div>
 
-      {/* === SCREEN 8: FINAL VOTE (CÂU HỎI CUỐI: TÀI HAY ĐỨC?) === */}
+      {/* === SCREEN 8: FINAL VOTE (CÂU HỎI CUỐI: TÀI HAY ĐỨC?) WITH DIRECT QR === */}
       <div id="screen-final-vote" className={`screen ${currentScreen === 'final-vote' ? 'active' : ''}`}>
-        <div style={{ position: 'absolute', top: 18, left: 20, zIndex: 30, display: 'flex', gap: '12px' }}>
-          <button
-            className="btn btn-back btn-back-sm"
-            onClick={() => setCurrentScreen('results')}
-          >
-            <span>← Quay lại kết quả Tình huống 6</span>
-          </button>
-          <button
-            className="btn-qr-trigger-sm"
-            onClick={() => setIsQrModalOpen(true)}
-            title="Mở mã QR cho cả lớp quét bình chọn"
-          >
-            <span>📱 Mở Mã QR Bình Chọn</span>
-          </button>
-        </div>
+        <button
+          className="btn btn-back btn-back-sm"
+          style={{ position: 'absolute', top: 18, left: 20, zIndex: 30 }}
+          onClick={() => setCurrentScreen('results')}
+        >
+          <span>← Quay lại kết quả Tình huống 6</span>
+        </button>
 
         <div className="final-vote-header">
           <div className="final-badge">ĐÚC KẾT TOÀN BỘ GAME</div>
@@ -1225,8 +1230,24 @@ export default function App() {
             </div>
           </div>
 
-          {/* Center VS Divider */}
-          <div className="vs-divider">VS</div>
+          {/* CENTER PANEL WITH DIRECT QR CODE FOR FINAL QUESTION */}
+          <div className="vs-center-container">
+            <div className="vs-divider">VS</div>
+
+            <div className="qr-inline-card" onClick={() => setIsQrModalOpen(true)} title="Bấm để phóng to mã QR">
+              <div className="qr-inline-img-box">
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(qrVoterUrlForFinalScenario)}&color=000000&bgcolor=ffffff`}
+                  alt="QR Code Bình chọn Cuối"
+                  className="qr-inline-img"
+                />
+              </div>
+              <div className="qr-inline-text">
+                <span className="qr-scan-badge">📱 QUÉT QR CÂU HỎI CUỐI</span>
+                <small className="qr-scan-sub">Tự động nhảy phiếu live</small>
+              </div>
+            </div>
+          </div>
 
           {/* Right Side: Blue (ĐỨC) */}
           <div className="vote-side right">

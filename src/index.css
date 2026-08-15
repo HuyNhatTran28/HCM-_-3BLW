@@ -1360,6 +1360,79 @@ body {
     50% { box-shadow: 0 0 35px rgba(37, 117, 252, 0.8); }
 }
 
+/* === INLINE CENTER QR CODE CARD FOR VOTE SCREEN === */
+.vs-center-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    pointer-events: auto;
+}
+
+.qr-inline-card {
+    background: rgba(18, 20, 42, 0.92);
+    border: 1px solid rgba(16, 185, 129, 0.5);
+    border-radius: 20px;
+    padding: 14px 16px;
+    backdrop-filter: blur(16px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 25px rgba(16, 185, 129, 0.35);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+}
+
+.qr-inline-card:hover {
+    transform: scale(1.06);
+    border-color: #10b981;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.9), 0 0 35px rgba(16, 185, 129, 0.6);
+}
+
+.qr-inline-img-box {
+    background: #ffffff;
+    padding: 8px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.qr-inline-img {
+    width: 140px;
+    height: 140px;
+    object-fit: contain;
+    border-radius: 6px;
+}
+
+.qr-inline-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.qr-scan-badge {
+    font-family: var(--font-heading);
+    font-size: 0.78rem;
+    font-weight: 900;
+    color: #10b981;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.qr-scan-sub {
+    font-size: 0.7rem;
+    color: #cbd5e1;
+    opacity: 0.85;
+}
+
 /* === QR CODE MODAL FOR CLASSROOM VOTING === */
 .btn-qr-trigger {
     background: linear-gradient(135deg, #10b981 0%, #059669 100%);
