@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import Peer from 'peerjs';
 import { QRCodeSVG } from 'qrcode.react';
 
 // Multi-scenario data structure (6 Scenarios)
@@ -366,6 +365,12 @@ export default function App() {
   const [isVoterMode] = useState(isVoterUrl);
 
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+  
+  // Predictable unique room ID for the current classroom presenter session
+  const initialRoomId = searchParams && searchParams.get('room') ? searchParams.get('room') : ('room_' + Math.random().toString(36).substring(2, 8));
+  const [roomId] = useState(initialRoomId);
+
+  const voterRoom = searchParams && searchParams.get('room') ? searchParams.get('room') : 'default_room';
   const initialScenarioFromUrl = searchParams && searchParams.get('scenario') ? parseInt(searchParams.get('scenario'), 10) : 1;
   const [selectedVoterScenario, setSelectedVoterScenario] = useState(initialScenarioFromUrl);
 
@@ -374,7 +379,6 @@ export default function App() {
   const [typedText, setTypedText] = useState('');
   const [isTypingComplete, setIsTypingComplete] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [connectedPeersCount, setConnectedPeersCount] = useState(0);
   
   // Track votes across all scenarios
@@ -409,10 +413,17 @@ export default function App() {
   const audioRef = useRef(null);
   const audioStartedRef = useRef(false);
 
-  // Realtime BroadcastChannel & PeerJS setup
+  // BroadcastChannel for local/tab sync
   const broadcastChannelRef = useRef(null);
-  const peerRef = useRef(null);
-  const peerConnRef = useRef(null);
+  const pollIntervalRef = useRef(null);
+
+  // Keep room parameter in presenter URL without reloading
+  useEffect(() => {
+    if (!isVoterMode && window.history.replaceState) {
+      const newUrl = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+      window.history.replaceState({ path: newUrl }, '', newUrl);
+    }
+  }, [roomId, isVoterMode]);
 
   // Play audio on first user click anywhere
   const handleFirstClick = () => {
@@ -429,9 +440,9 @@ export default function App() {
     return () => window.removeEventListener('click', handleFirstClick);
   }, []);
 
-  // REAL-TIME SYNC SETUP (Presenter & Voter)
+  // REAL-TIME CLOUD & LOCAL SYNC (keyvalue.immanuel.co + BroadcastChannel)
   useEffect(() => {
-    // 1. BroadcastChannel for same-browser / multi-tab real-time sync
+    // 1. BroadcastChannel setup
     try {
       const bc = new BroadcastChannel('hcm_moral_game_sync');
       broadcastChannelRef.current = bc;
@@ -450,61 +461,97 @@ export default function App() {
       console.log('BroadcastChannel not supported', e);
     }
 
-    // 2. PeerJS WebRTC Realtime Sync across different devices
+    // 2. Cloud key-value sync polling for Presenter screen (Every 1.5 seconds)
     if (!isVoterMode) {
-      // PRESENTER HOST PEER
-      try {
-        const peer = new Peer('hcm-bl3w-class-room');
-        peerRef.current = peer;
+      const fetchVotesFromCloud = async () => {
+        try {
+          const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${roomId}`);
+          if (!res.ok) return;
+          const text = await res.text();
+          
+          if (!text || text.trim() === '' || text === 'null') {
+            // First time presenter initializes the database room
+            const initialData = {
+              1: { red: 0, blue: 0 },
+              2: { red: 0, blue: 0 },
+              3: { red: 0, blue: 0 },
+              4: { red: 0, blue: 0 },
+              5: { red: 0, blue: 0 },
+              6: { red: 0, blue: 0 },
+              7: { red: 0, blue: 0 }
+            };
+            await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${encodeURIComponent(JSON.stringify(initialData))}`, { method: 'POST' });
+            return;
+          }
 
-        peer.on('open', (id) => {
-          console.log('Presenter PeerJS Ready ID:', id);
-        });
+          const data = JSON.parse(text);
+          setConnectedPeersCount(1); // Set artificial status connected
 
-        peer.on('connection', (conn) => {
-          setConnectedPeersCount(prev => prev + 1);
+          setAllScenarioVotes((prevAll) => {
+            const newAll = { ...prevAll };
+            let changed = false;
 
-          conn.on('data', (data) => {
-            if (!data) return;
-            if (data.type === 'VOTE') {
-              handleIncomingRealtimeVote(data.scenarioId, data.choice);
-            } else if (data.type === 'FINAL_VOTE') {
-              handleIncomingFinalVote(data.choice);
+            for (let i = 1; i <= 6; i++) {
+              if (data[i]) {
+                if (data[i].red !== prevAll[i].red || data[i].blue !== prevAll[i].blue) {
+                  newAll[i] = { red: data[i].red, blue: data[i].blue };
+                  changed = true;
+
+                  // Pop animation if active scenario vote updated
+                  if (i === activeScenario.id) {
+                    if (data[i].red > prevAll[i].red) {
+                      setPopRed(true);
+                      setTimeout(() => setPopRed(false), 200);
+                    }
+                    if (data[i].blue > prevAll[i].blue) {
+                      setPopBlue(true);
+                      setTimeout(() => setPopBlue(false), 200);
+                    }
+                  }
+                }
+              }
             }
+
+            if (data[7]) {
+              if (data[7].red !== finalRedVotes || data[7].blue !== finalBlueVotes) {
+                setFinalRedVotes(data[7].red);
+                setFinalBlueVotes(data[7].blue);
+
+                if (data[7].red > finalRedVotes) {
+                  setFinalPopRed(true);
+                  setTimeout(() => setFinalPopRed(false), 200);
+                }
+                if (data[7].blue > finalBlueVotes) {
+                  setFinalPopBlue(true);
+                  setTimeout(() => setFinalPopBlue(false), 200);
+                }
+              }
+            }
+
+            // Sync active screen states
+            const currentScId = activeScenario.id;
+            if (data[currentScId]) {
+              setRedVotes(data[currentScId].red);
+              setBlueVotes(data[currentScId].blue);
+            }
+
+            return newAll;
           });
+        } catch (err) {
+          console.log("Cloud polling error: ", err);
+        }
+      };
 
-          conn.on('close', () => {
-            setConnectedPeersCount(prev => Math.max(0, prev - 1));
-          });
-        });
+      fetchVotesFromCloud();
+      pollIntervalRef.current = setInterval(fetchVotesFromCloud, 1500);
 
-        return () => {
-          peer.destroy();
-        };
-      } catch (err) {
-        console.log('PeerJS Host Error', err);
-      }
-    } else {
-      // MOBILE VOTER PEER CLIENT
-      try {
-        const peer = new Peer();
-        peerRef.current = peer;
-
-        peer.on('open', () => {
-          const conn = peer.connect('hcm-bl3w-class-room');
-          peerConnRef.current = conn;
-        });
-
-        return () => {
-          peer.destroy();
-        };
-      } catch (err) {
-        console.log('PeerJS Client Error', err);
-      }
+      return () => {
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      };
     }
-  }, [isVoterMode]);
+  }, [roomId, isVoterMode, activeScenario.id, finalRedVotes, finalBlueVotes]);
 
-  // Handle incoming votes from students' mobile phones
+  // Handle local votes
   const handleIncomingRealtimeVote = (scId, choice) => {
     setAllScenarioVotes(prevAll => {
       const currentVal = prevAll[scId] || { red: 0, blue: 0 };
@@ -515,7 +562,6 @@ export default function App() {
       return { ...prevAll, [scId]: updated };
     });
 
-    // If current scenario matches active scenario, update active vote state & pop animation
     if (scId === activeScenario.id) {
       if (choice === 'red') {
         setRedVotes(r => r + 1);
@@ -623,52 +669,83 @@ export default function App() {
     }
   };
 
-  const handleAdjustVote = (type, delta) => {
+  const handleAdjustVote = async (type, delta) => {
     const scId = activeScenario.id;
+    let newRed = redVotes;
+    let newBlue = blueVotes;
+
     if (type === 'red') {
-      setRedVotes(prev => {
-        const newVal = Math.max(0, prev + delta);
-        setAllScenarioVotes(all => ({
-          ...all,
-          [scId]: { ...all[scId], red: newVal }
-        }));
-        return newVal;
-      });
+      newRed = Math.max(0, redVotes + delta);
+      setRedVotes(newRed);
       setPopRed(true);
       setTimeout(() => setPopRed(false), 200);
     } else {
-      setBlueVotes(prev => {
-        const newVal = Math.max(0, prev + delta);
-        setAllScenarioVotes(all => ({
-          ...all,
-          [scId]: { ...all[scId], blue: newVal }
-        }));
-        return newVal;
-      });
+      newBlue = Math.max(0, blueVotes + delta);
+      setBlueVotes(newBlue);
       setPopBlue(true);
       setTimeout(() => setPopBlue(false), 200);
     }
-  };
 
-  const handleAdjustFinalVote = (type, delta) => {
-    if (type === 'red') {
-      setFinalRedVotes(prev => Math.max(0, prev + delta));
-      setFinalPopRed(true);
-      setTimeout(() => setFinalPopRed(false), 200);
-    } else {
-      setFinalBlueVotes(prev => Math.max(0, prev + delta));
-      setFinalPopBlue(true);
-      setTimeout(() => setFinalPopBlue(false), 200);
+    setAllScenarioVotes(all => ({
+      ...all,
+      [scId]: { red: newRed, blue: newBlue }
+    }));
+
+    // Update cloud
+    try {
+      const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${roomId}`);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text !== 'null') {
+          const data = JSON.parse(text);
+          data[scId] = { red: newRed, blue: newBlue };
+          await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${encodeURIComponent(JSON.stringify(data))}`, { method: 'POST' });
+        }
+      }
+    } catch (e) {
+      console.log("Error adjusting vote in cloud: ", e);
     }
   };
 
-  // Mobile Voter Action (When student taps Red or Blue on phone)
-  const handleMobileVoteSubmit = (scId, choice) => {
+  const handleAdjustFinalVote = async (type, delta) => {
+    let newRed = finalRedVotes;
+    let newBlue = finalBlueVotes;
+
+    if (type === 'red') {
+      newRed = Math.max(0, finalRedVotes + delta);
+      setFinalRedVotes(newRed);
+      setFinalPopRed(true);
+      setTimeout(() => setFinalPopRed(false), 200);
+    } else {
+      newBlue = Math.max(0, finalBlueVotes + delta);
+      setFinalBlueVotes(newBlue);
+      setFinalPopBlue(true);
+      setTimeout(() => setFinalPopBlue(false), 200);
+    }
+
+    // Update cloud
+    try {
+      const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${roomId}`);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text !== 'null') {
+          const data = JSON.parse(text);
+          data[7] = { red: newRed, blue: newBlue };
+          await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${encodeURIComponent(JSON.stringify(data))}`, { method: 'POST' });
+        }
+      }
+    } catch (e) {
+      console.log("Error adjusting final vote in cloud: ", e);
+    }
+  };
+
+  // Mobile Voter Submit action
+  const handleMobileVoteSubmit = async (scId, choice) => {
     setVoterChoice(choice);
     setVoteFeedback(`✅ Đã gửi phiếu ${choice === 'red' ? '🔴 PHE ĐỎ' : '🔵 PHE XANH'} lên màn hình máy chiếu!`);
     setTimeout(() => setVoteFeedback(''), 4000);
 
-    // 1. Send via BroadcastChannel
+    // 1. Local Broadcast sync
     if (broadcastChannelRef.current) {
       broadcastChannelRef.current.postMessage({
         type: scId === 7 ? 'FINAL_VOTE' : 'VOTE',
@@ -677,13 +754,37 @@ export default function App() {
       });
     }
 
-    // 2. Send via PeerJS WebRTC
-    if (peerConnRef.current && peerConnRef.current.open) {
-      peerConnRef.current.send({
-        type: scId === 7 ? 'FINAL_VOTE' : 'VOTE',
-        scenarioId: scId,
-        choice: choice
-      });
+    // 2. Cloud key-value storage sync (Fetch -> update -> post)
+    try {
+      const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${voterRoom}`);
+      if (!res.ok) return;
+      const text = await res.text();
+
+      let data = {
+        1: { red: 0, blue: 0 },
+        2: { red: 0, blue: 0 },
+        3: { red: 0, blue: 0 },
+        4: { red: 0, blue: 0 },
+        5: { red: 0, blue: 0 },
+        6: { red: 0, blue: 0 },
+        7: { red: 0, blue: 0 }
+      };
+
+      if (text && text.trim() !== '' && text !== 'null') {
+        data = JSON.parse(text);
+      }
+
+      if (!data[scId]) {
+        data[scId] = { red: 0, blue: 0 };
+      }
+
+      // Add vote
+      data[scId][choice] += 1;
+
+      // Update to cloud
+      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${voterRoom}/${encodeURIComponent(JSON.stringify(data))}`, { method: 'POST' });
+    } catch (err) {
+      console.log("Voter cloud submission error: ", err);
     }
   };
 
@@ -696,26 +797,34 @@ export default function App() {
     }
   };
 
-  const resetGame = () => {
+  const resetGame = async () => {
     resetVotes();
     resetFinalVotes();
-    setAllScenarioVotes({
+    const initialData = {
       1: { red: 0, blue: 0 },
       2: { red: 0, blue: 0 },
       3: { red: 0, blue: 0 },
       4: { red: 0, blue: 0 },
       5: { red: 0, blue: 0 },
-      6: { red: 0, blue: 0 }
-    });
+      6: { red: 0, blue: 0 },
+      7: { red: 0, blue: 0 }
+    };
+    setAllScenarioVotes(initialData);
     setScenarioIndex(0);
     setCurrentScreen('landing');
     setIsDropdownOpen(false);
+
+    // Reset cloud storage
+    try {
+      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${encodeURIComponent(JSON.stringify(initialData))}`, { method: 'POST' });
+    } catch (e) {
+      console.log("Error resetting cloud db: ", e);
+    }
   };
 
-  // Base domain for QR code
   const currentBaseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://hcm-bl3w.vercel.app';
-  const qrVoterUrlForActiveScenario = `${currentBaseUrl}/?voter=true&scenario=${activeScenario.id}`;
-  const qrVoterUrlForFinalScenario = `${currentBaseUrl}/?voter=true&scenario=7`;
+  const qrVoterUrlForActiveScenario = `${currentBaseUrl}/?voter=true&room=${roomId}&scenario=${activeScenario.id}`;
+  const qrVoterUrlForFinalScenario = `${currentBaseUrl}/?voter=true&room=${roomId}&scenario=7`;
 
   // Vote calculations for scenario vote
   const totalVotes = redVotes + blueVotes;
