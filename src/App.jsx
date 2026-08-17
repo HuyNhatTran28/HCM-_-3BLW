@@ -359,6 +359,51 @@ const scenariosData = [
   }
 ];
 
+// Helper functions to serialize and deserialize vote data safely
+// Example format: 5-3_1-0_2-2_0-0_0-0_0-0_4-6 (URL-safe, bypasses IIS block on colons/brackets)
+const serializeVotes = (votesObj, finalRed, finalBlue) => {
+  const parts = [];
+  for (let i = 1; i <= 6; i++) {
+    const sc = votesObj[i] || { red: 0, blue: 0 };
+    parts.push(`${sc.red}-${sc.blue}`);
+  }
+  parts.push(`${finalRed}-${finalBlue}`);
+  return parts.join('_');
+};
+
+const deserializeVotes = (str) => {
+  const defaultData = {
+    1: { red: 0, blue: 0 },
+    2: { red: 0, blue: 0 },
+    3: { red: 0, blue: 0 },
+    4: { red: 0, blue: 0 },
+    5: { red: 0, blue: 0 },
+    6: { red: 0, blue: 0 },
+    7: { red: 0, blue: 0 }
+  };
+  
+  if (!str || str.trim() === '' || str === 'null' || str.indexOf('_') === -1) {
+    return defaultData;
+  }
+  
+  try {
+    const parts = str.split('_');
+    const data = {};
+    for (let i = 1; i <= 7; i++) {
+      const scStr = parts[i - 1] || '0-0';
+      const [redStr, blueStr] = scStr.split('-');
+      data[i] = {
+        red: parseInt(redStr, 10) || 0,
+        blue: parseInt(blueStr, 10) || 0
+      };
+    }
+    return data;
+  } catch (e) {
+    console.log("Deserialization failed, fallback to default", e);
+    return defaultData;
+  }
+};
+
 export default function App() {
   // Check if current URL is in Mobile Voter Mode (?voter=true)
   const isVoterUrl = typeof window !== 'undefined' && window.location.search.includes('voter=true');
@@ -379,7 +424,6 @@ export default function App() {
   const [typedText, setTypedText] = useState('');
   const [isTypingComplete, setIsTypingComplete] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [connectedPeersCount, setConnectedPeersCount] = useState(0);
   
   // Track votes across all scenarios
   const [allScenarioVotes, setAllScenarioVotes] = useState({
@@ -413,7 +457,7 @@ export default function App() {
   const audioRef = useRef(null);
   const audioStartedRef = useRef(false);
 
-  // BroadcastChannel for local/tab sync
+  // BroadcastChannel & Polling refs
   const broadcastChannelRef = useRef(null);
   const pollIntervalRef = useRef(null);
 
@@ -470,32 +514,28 @@ export default function App() {
           const text = await res.text();
           
           if (!text || text.trim() === '' || text === 'null') {
-            // First time presenter initializes the database room
-            const initialData = {
+            // First time presenter initializes the database room with 100% safe format
+            const initialData = serializeVotes({
               1: { red: 0, blue: 0 },
               2: { red: 0, blue: 0 },
               3: { red: 0, blue: 0 },
               4: { red: 0, blue: 0 },
               5: { red: 0, blue: 0 },
-              6: { red: 0, blue: 0 },
-              7: { red: 0, blue: 0 }
-            };
-            await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${encodeURIComponent(JSON.stringify(initialData))}`, { method: 'POST' });
+              6: { red: 0, blue: 0 }
+            }, 0, 0);
+            await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${initialData}`, { method: 'POST' });
             return;
           }
 
-          const data = JSON.parse(text);
-          setConnectedPeersCount(1); // Set artificial status connected
+          const data = deserializeVotes(text);
 
           setAllScenarioVotes((prevAll) => {
             const newAll = { ...prevAll };
-            let changed = false;
 
             for (let i = 1; i <= 6; i++) {
               if (data[i]) {
                 if (data[i].red !== prevAll[i].red || data[i].blue !== prevAll[i].blue) {
                   newAll[i] = { red: data[i].red, blue: data[i].blue };
-                  changed = true;
 
                   // Pop animation if active scenario vote updated
                   if (i === activeScenario.id) {
@@ -686,22 +726,16 @@ export default function App() {
       setTimeout(() => setPopBlue(false), 200);
     }
 
-    setAllScenarioVotes(all => ({
-      ...all,
+    const updatedVotes = {
+      ...allScenarioVotes,
       [scId]: { red: newRed, blue: newBlue }
-    }));
+    };
+    setAllScenarioVotes(updatedVotes);
 
-    // Update cloud
+    // Update cloud with safe format
     try {
-      const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${roomId}`);
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text !== 'null') {
-          const data = JSON.parse(text);
-          data[scId] = { red: newRed, blue: newBlue };
-          await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${encodeURIComponent(JSON.stringify(data))}`, { method: 'POST' });
-        }
-      }
+      const payload = serializeVotes(updatedVotes, finalRedVotes, finalBlueVotes);
+      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${payload}`, { method: 'POST' });
     } catch (e) {
       console.log("Error adjusting vote in cloud: ", e);
     }
@@ -723,17 +757,10 @@ export default function App() {
       setTimeout(() => setFinalPopBlue(false), 200);
     }
 
-    // Update cloud
+    // Update cloud with safe format
     try {
-      const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${roomId}`);
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text !== 'null') {
-          const data = JSON.parse(text);
-          data[7] = { red: newRed, blue: newBlue };
-          await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${encodeURIComponent(JSON.stringify(data))}`, { method: 'POST' });
-        }
-      }
+      const payload = serializeVotes(allScenarioVotes, newRed, newBlue);
+      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${payload}`, { method: 'POST' });
     } catch (e) {
       console.log("Error adjusting final vote in cloud: ", e);
     }
@@ -754,35 +781,28 @@ export default function App() {
       });
     }
 
-    // 2. Cloud key-value storage sync (Fetch -> update -> post)
+    // 2. Cloud key-value storage sync (Fetch -> update -> post) in safe format
     try {
       const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${voterRoom}`);
       if (!res.ok) return;
       const text = await res.text();
 
-      let data = {
-        1: { red: 0, blue: 0 },
-        2: { red: 0, blue: 0 },
-        3: { red: 0, blue: 0 },
-        4: { red: 0, blue: 0 },
-        5: { red: 0, blue: 0 },
-        6: { red: 0, blue: 0 },
-        7: { red: 0, blue: 0 }
-      };
+      const data = deserializeVotes(text);
 
-      if (text && text.trim() !== '' && text !== 'null') {
-        data = JSON.parse(text);
+      if (scId === 7) {
+        data[7][choice] += 1;
+      } else {
+        if (!data[scId]) data[scId] = { red: 0, blue: 0 };
+        data[scId][choice] += 1;
       }
 
-      if (!data[scId]) {
-        data[scId] = { red: 0, blue: 0 };
-      }
+      // Convert back to safe flat string
+      const finalRed = data[7]?.red || 0;
+      const finalBlue = data[7]?.blue || 0;
+      const payload = serializeVotes(data, finalRed, finalBlue);
 
-      // Add vote
-      data[scId][choice] += 1;
-
-      // Update to cloud
-      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${voterRoom}/${encodeURIComponent(JSON.stringify(data))}`, { method: 'POST' });
+      // Post to cloud
+      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${voterRoom}/${payload}`, { method: 'POST' });
     } catch (err) {
       console.log("Voter cloud submission error: ", err);
     }
@@ -806,17 +826,17 @@ export default function App() {
       3: { red: 0, blue: 0 },
       4: { red: 0, blue: 0 },
       5: { red: 0, blue: 0 },
-      6: { red: 0, blue: 0 },
-      7: { red: 0, blue: 0 }
+      6: { red: 0, blue: 0 }
     };
     setAllScenarioVotes(initialData);
     setScenarioIndex(0);
     setCurrentScreen('landing');
     setIsDropdownOpen(false);
 
-    // Reset cloud storage
+    // Reset cloud storage with safe format
     try {
-      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${encodeURIComponent(JSON.stringify(initialData))}`, { method: 'POST' });
+      const payload = serializeVotes(initialData, 0, 0);
+      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${payload}`, { method: 'POST' });
     } catch (e) {
       console.log("Error resetting cloud db: ", e);
     }
