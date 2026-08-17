@@ -587,6 +587,32 @@ export default function App() {
     }
   }, [currentScreen, scenarioIndex]);
 
+  // Audio Voiceover player for each scene narration
+  useEffect(() => {
+    if (currentScreen.startsWith('scene-') && audioRef.current) {
+      const sceneNum = parseInt(currentScreen.replace('scene-', ''), 10);
+      const scId = activeScenario.id;
+      
+      try {
+        audioRef.current.pause();
+        audioRef.current.src = `/HCM2020/TH${scId}/${sceneNum}.mp3`;
+        audioRef.current.loop = false;
+        audioRef.current.load();
+        
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(error => {
+            console.log("Audio autoplay deferred until first user interaction:", error);
+          });
+        }
+      } catch (err) {
+        console.error("Audio error: ", err);
+      }
+    } else if (audioRef.current) {
+      audioRef.current.pause();
+    }
+  }, [currentScreen, scenarioIndex]);
+
   const skipTypewriter = () => {
     if (currentScreen.startsWith('scene-')) {
       const sceneNum = parseInt(currentScreen.replace('scene-', ''), 10);
@@ -839,7 +865,7 @@ export default function App() {
   return (
     <div className="app-viewport" id="app">
       {/* Audio Element */}
-      <audio ref={audioRef} id="bgMusic" loop>
+      <audio ref={audioRef} id="bgMusic">
         {/* Thay link nhạc nền vào đây: src="URL_NHAC_CUA_BAN" */}
       </audio>
 
