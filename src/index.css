@@ -1599,16 +1599,26 @@ body {
 }
 
 /* === MOBILE VOTER INTERFACE (STUDENT PHONES) === */
+body.voter-mode {
+    overflow-y: auto !important;
+    height: auto !important;
+    min-height: 100vh;
+    display: block !important;
+}
+
 .mobile-voter-viewport {
     min-height: 100vh;
     width: 100%;
     background: radial-gradient(circle at top, #1c1d3d 0%, #0a0b16 100%);
     color: #ffffff;
-    padding: 20px 16px 40px 16px;
+    padding: 16px 14px 40px 14px;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
     font-family: var(--font-body);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
 }
 
 .voter-header {
@@ -1633,7 +1643,7 @@ body {
 
 .voter-title {
     font-family: var(--font-heading);
-    font-size: 1.5rem;
+    font-size: 1.4rem;
     font-weight: 900;
     color: #ffffff;
 }
@@ -1650,6 +1660,8 @@ body {
     overflow-x: auto;
     padding-bottom: 8px;
     scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
 }
 
 .voter-tab-btn {
@@ -1705,6 +1717,8 @@ body {
     flex-direction: column;
     gap: 18px;
     backdrop-filter: blur(12px);
+    scroll-margin-top: 15px;
+    animation: fadeIn 0.35s ease-out;
 }
 
 .voter-topic-tag {

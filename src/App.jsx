@@ -465,6 +465,25 @@ export default function App() {
   const broadcastChannelRef = useRef(null);
   const pollIntervalRef = useRef(null);
   const voteLockRef = useRef(false);
+  const activeTabRef = useRef(null);
+  const voterCardRef = useRef(null);
+
+  // Enable smooth mobile body scrolling & auto-scroll on voter mode
+  useEffect(() => {
+    if (isVoterMode) {
+      document.body.classList.add('voter-mode');
+      
+      if (activeTabRef.current) {
+        activeTabRef.current.scrollIntoView({
+          behavior: 'smooth',
+          block: 'nearest',
+          inline: 'center'
+        });
+      }
+
+      return () => document.body.classList.remove('voter-mode');
+    }
+  }, [isVoterMode, selectedVoterScenario]);
 
   // Keep room parameter in presenter URL without reloading
   useEffect(() => {
@@ -880,6 +899,7 @@ export default function App() {
           {scenariosData.map((sc) => (
             <button
               key={sc.id}
+              ref={selectedVoterScenario === sc.id ? activeTabRef : null}
               className={`voter-tab-btn ${selectedVoterScenario === sc.id ? 'active' : ''}`}
               onClick={() => {
                 setSelectedVoterScenario(sc.id);
@@ -890,6 +910,7 @@ export default function App() {
             </button>
           ))}
           <button
+            ref={selectedVoterScenario === 7 ? activeTabRef : null}
             className={`voter-tab-btn final-tab ${selectedVoterScenario === 7 ? 'active' : ''}`}
             onClick={() => {
               setSelectedVoterScenario(7);
@@ -909,7 +930,7 @@ export default function App() {
 
         {/* Mobile Voter Content Card */}
         {selectedVoterScenario <= 6 && activeVoterScenario ? (
-          <div className="voter-card-container">
+          <div className="voter-card-container" ref={voterCardRef}>
             <div className="voter-topic-tag">{activeVoterScenario.topicTitle}</div>
 
             <div className="voter-options-grid">
@@ -946,7 +967,7 @@ export default function App() {
           </div>
         ) : (
           /* Final Question Voter View (Tài vs Đức) */
-          <div className="voter-card-container">
+          <div className="voter-card-container" ref={voterCardRef}>
             <div className="voter-topic-tag">🎓 CÂU HỎI CUỐI: TÀI HAY ĐỨC?</div>
             <p className="voter-final-desc">
               Nếu buộc phải lựa chọn giữa một người có <strong>Tài rất cao nhưng thiếu Đức</strong> và một người có <strong>Đức tốt nhưng năng lực còn hạn chế</strong>, bạn sẽ chọn ai?
