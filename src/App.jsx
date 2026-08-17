@@ -529,52 +529,51 @@ export default function App() {
 
           const data = deserializeVotes(text);
 
+          // Update active scenario counters
+          const currentScId = activeScenario.id;
+          if (data[currentScId]) {
+            setRedVotes((prevRed) => {
+              if (data[currentScId].red > prevRed) {
+                setPopRed(true);
+                setTimeout(() => setPopRed(false), 200);
+              }
+              return data[currentScId].red;
+            });
+            setBlueVotes((prevBlue) => {
+              if (data[currentScId].blue > prevBlue) {
+                setPopBlue(true);
+                setTimeout(() => setPopBlue(false), 200);
+              }
+              return data[currentScId].blue;
+            });
+          }
+
+          // Sync final scenario votes
+          if (data[7]) {
+            setFinalRedVotes((prevFinalRed) => {
+              if (data[7].red > prevFinalRed) {
+                setFinalPopRed(true);
+                setTimeout(() => setFinalPopRed(false), 200);
+              }
+              return data[7].red;
+            });
+            setFinalBlueVotes((prevFinalBlue) => {
+              if (data[7].blue > prevFinalBlue) {
+                setFinalPopBlue(true);
+                setTimeout(() => setFinalPopBlue(false), 200);
+              }
+              return data[7].blue;
+            });
+          }
+
+          // Sync all scenario votes
           setAllScenarioVotes((prevAll) => {
             const newAll = { ...prevAll };
-
             for (let i = 1; i <= 6; i++) {
               if (data[i]) {
-                if (data[i].red !== prevAll[i].red || data[i].blue !== prevAll[i].blue) {
-                  newAll[i] = { red: data[i].red, blue: data[i].blue };
-
-                  // Pop animation if active scenario vote updated
-                  if (i === activeScenario.id) {
-                    if (data[i].red > prevAll[i].red) {
-                      setPopRed(true);
-                      setTimeout(() => setPopRed(false), 200);
-                    }
-                    if (data[i].blue > prevAll[i].blue) {
-                      setPopBlue(true);
-                      setTimeout(() => setPopBlue(false), 200);
-                    }
-                  }
-                }
+                newAll[i] = { red: data[i].red, blue: data[i].blue };
               }
             }
-
-            if (data[7]) {
-              if (data[7].red !== finalRedVotes || data[7].blue !== finalBlueVotes) {
-                setFinalRedVotes(data[7].red);
-                setFinalBlueVotes(data[7].blue);
-
-                if (data[7].red > finalRedVotes) {
-                  setFinalPopRed(true);
-                  setTimeout(() => setFinalPopRed(false), 200);
-                }
-                if (data[7].blue > finalBlueVotes) {
-                  setFinalPopBlue(true);
-                  setTimeout(() => setFinalPopBlue(false), 200);
-                }
-              }
-            }
-
-            // Sync active screen states
-            const currentScId = activeScenario.id;
-            if (data[currentScId]) {
-              setRedVotes(data[currentScId].red);
-              setBlueVotes(data[currentScId].blue);
-            }
-
             return newAll;
           });
         } catch (err) {
@@ -589,7 +588,7 @@ export default function App() {
         if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       };
     }
-  }, [roomId, isVoterMode, activeScenario.id, finalRedVotes, finalBlueVotes]);
+  }, [roomId, isVoterMode, activeScenario.id]);
 
   // Handle local votes
   const handleIncomingRealtimeVote = (scId, choice) => {
