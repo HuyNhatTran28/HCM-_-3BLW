@@ -509,7 +509,7 @@ export default function App() {
     if (!isVoterMode) {
       const fetchVotesFromCloud = async () => {
         try {
-          const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${roomId}`);
+          const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${roomId}?t=${Date.now()}`);
           if (!res.ok) return;
           const text = await res.text();
           
@@ -523,7 +523,7 @@ export default function App() {
               5: { red: 0, blue: 0 },
               6: { red: 0, blue: 0 }
             }, 0, 0);
-            await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${initialData}`, { method: 'POST' });
+            await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${initialData}?t=${Date.now()}`, { method: 'POST' });
             return;
           }
 
@@ -734,7 +734,7 @@ export default function App() {
     // Update cloud with safe format
     try {
       const payload = serializeVotes(updatedVotes, finalRedVotes, finalBlueVotes);
-      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${payload}`, { method: 'POST' });
+      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${payload}?t=${Date.now()}`, { method: 'POST' });
     } catch (e) {
       console.log("Error adjusting vote in cloud: ", e);
     }
@@ -759,7 +759,7 @@ export default function App() {
     // Update cloud with safe format
     try {
       const payload = serializeVotes(allScenarioVotes, newRed, newBlue);
-      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${payload}`, { method: 'POST' });
+      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${payload}?t=${Date.now()}`, { method: 'POST' });
     } catch (e) {
       console.log("Error adjusting final vote in cloud: ", e);
     }
@@ -782,7 +782,7 @@ export default function App() {
 
     // 2. Cloud key-value storage sync (Fetch -> update -> post) in safe format
     try {
-      const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${voterRoom}`);
+      const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${voterRoom}?t=${Date.now()}`);
       if (!res.ok) return;
       const text = await res.text();
 
@@ -801,7 +801,7 @@ export default function App() {
       const payload = serializeVotes(data, finalRed, finalBlue);
 
       // Post to cloud
-      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${voterRoom}/${payload}`, { method: 'POST' });
+      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${voterRoom}/${payload}?t=${Date.now()}`, { method: 'POST' });
     } catch (err) {
       console.log("Voter cloud submission error: ", err);
     }
@@ -835,7 +835,7 @@ export default function App() {
     // Reset cloud storage with safe format
     try {
       const payload = serializeVotes(initialData, 0, 0);
-      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${payload}`, { method: 'POST' });
+      await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${payload}?t=${Date.now()}`, { method: 'POST' });
     } catch (e) {
       console.log("Error resetting cloud db: ", e);
     }
