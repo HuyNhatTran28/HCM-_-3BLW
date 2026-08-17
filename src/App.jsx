@@ -382,12 +382,16 @@ const deserializeVotes = (str) => {
     7: { red: 0, blue: 0 }
   };
   
-  if (!str || str.trim() === '' || str === 'null' || str.indexOf('_') === -1) {
+  // CRITICAL: API may return value wrapped in double quotes (JSON string format)
+  // e.g. "1-0_0-0_..." — must strip quotes before parsing!
+  const cleaned = str ? str.replace(/"/g, '').trim() : '';
+  
+  if (!cleaned || cleaned === '' || cleaned === 'null' || cleaned.indexOf('_') === -1) {
     return defaultData;
   }
   
   try {
-    const parts = str.split('_');
+    const parts = cleaned.split('_');
     const data = {};
     for (let i = 1; i <= 7; i++) {
       const scStr = parts[i - 1] || '0-0';
@@ -512,9 +516,9 @@ export default function App() {
         try {
           const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${roomId}?t=${Date.now()}`);
           if (!res.ok) return;
-          const text = await res.text();
+          const text = (await res.text()).replace(/"/g, '').trim();
           
-          if (!text || text.trim() === '' || text === 'null') {
+          if (!text || text === '' || text === 'null') {
             // No data yet — just use local zeros, do NOT write to cloud
             // (writing zeros here was overwriting real votes from phones)
             return;
@@ -781,7 +785,7 @@ export default function App() {
       // 2. Cloud key-value storage sync (Fetch -> update -> post) in safe format
       const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${voterRoom}?t=${Date.now()}`);
       if (!res.ok) { voteLockRef.current = false; return; }
-      const text = await res.text();
+      const text = (await res.text()).replace(/"/g, '').trim();
 
       const data = deserializeVotes(text);
 
