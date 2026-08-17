@@ -460,6 +460,7 @@ export default function App() {
   // BroadcastChannel & Polling refs
   const broadcastChannelRef = useRef(null);
   const pollIntervalRef = useRef(null);
+  const voteLockRef = useRef(false);
 
   // Keep room parameter in presenter URL without reloading
   useEffect(() => {
@@ -514,16 +515,8 @@ export default function App() {
           const text = await res.text();
           
           if (!text || text.trim() === '' || text === 'null') {
-            // First time presenter initializes the database room with 100% safe format
-            const initialData = serializeVotes({
-              1: { red: 0, blue: 0 },
-              2: { red: 0, blue: 0 },
-              3: { red: 0, blue: 0 },
-              4: { red: 0, blue: 0 },
-              5: { red: 0, blue: 0 },
-              6: { red: 0, blue: 0 }
-            }, 0, 0);
-            await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${roomId}/${initialData}?t=${Date.now()}`, { method: 'POST' });
+            // No data yet — just use local zeros, do NOT write to cloud
+            // (writing zeros here was overwriting real votes from phones)
             return;
           }
 
@@ -765,25 +758,29 @@ export default function App() {
     }
   };
 
-  // Mobile Voter Submit action
+  // Mobile Voter Submit action (with lock to prevent race conditions)
   const handleMobileVoteSubmit = async (scId, choice) => {
-    setVoterChoice(choice);
-    setVoteFeedback(`✅ Đã gửi phiếu ${choice === 'red' ? '🔴 PHE ĐỎ' : '🔵 PHE XANH'} lên màn hình máy chiếu!`);
-    setTimeout(() => setVoteFeedback(''), 4000);
+    // CRITICAL: Prevent concurrent submissions (race condition protection)
+    if (voteLockRef.current) return;
+    voteLockRef.current = true;
 
-    // 1. Local Broadcast sync
-    if (broadcastChannelRef.current) {
-      broadcastChannelRef.current.postMessage({
-        type: scId === 7 ? 'FINAL_VOTE' : 'VOTE',
-        scenarioId: scId,
-        choice: choice
-      });
-    }
-
-    // 2. Cloud key-value storage sync (Fetch -> update -> post) in safe format
     try {
+      setVoterChoice(choice);
+      setVoteFeedback(`✅ Đã gửi phiếu ${choice === 'red' ? '🔴 PHE ĐỎ' : '🔵 PHE XANH'} lên màn hình máy chiếu!`);
+      setTimeout(() => setVoteFeedback(''), 4000);
+
+      // 1. Local Broadcast sync
+      if (broadcastChannelRef.current) {
+        broadcastChannelRef.current.postMessage({
+          type: scId === 7 ? 'FINAL_VOTE' : 'VOTE',
+          scenarioId: scId,
+          choice: choice
+        });
+      }
+
+      // 2. Cloud key-value storage sync (Fetch -> update -> post) in safe format
       const res = await fetch(`https://keyvalue.immanuel.co/api/KeyVal/GetValue/hcm_moral_game_v2/${voterRoom}?t=${Date.now()}`);
-      if (!res.ok) return;
+      if (!res.ok) { voteLockRef.current = false; return; }
       const text = await res.text();
 
       const data = deserializeVotes(text);
@@ -804,6 +801,9 @@ export default function App() {
       await fetch(`https://keyvalue.immanuel.co/api/KeyVal/UpdateValue/hcm_moral_game_v2/${voterRoom}/${payload}?t=${Date.now()}`, { method: 'POST' });
     } catch (err) {
       console.log("Voter cloud submission error: ", err);
+    } finally {
+      // Release lock after a small delay to prevent rapid re-taps
+      setTimeout(() => { voteLockRef.current = false; }, 800);
     }
   };
 
